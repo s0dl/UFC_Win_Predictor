@@ -1,0 +1,12 @@
+# Runtime dependencies for the prediction API.
+# Do not generate this with `pip freeze`; the full conda env includes local
+# build paths, CUDA wheels, notebook packages, and transitive dependencies.
+
+fastapi>=0.136,<1.0
+uvicorn[standard]>=0.46,<1.0
+pydantic>=2.13,<3.0
+
+numpy>=2.0,<3.0
+pandas>=2.2,<3.0
+scikit-learn>=1.8,<2.0
+xgboost>=3.2,<4.0

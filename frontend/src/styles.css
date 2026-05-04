@@ -1,0 +1,351 @@
+:root {
+  color: #17202a;
+  background: #f5f7f9;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.page {
+  width: min(1120px, calc(100vw - 40px));
+  margin: 0 auto;
+  padding: 32px 0 48px;
+}
+
+.page-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: #607080;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+h1,
+h2 {
+  margin: 0;
+  line-height: 1.1;
+}
+
+h1 {
+  font-size: 32px;
+}
+
+h2 {
+  font-size: 26px;
+}
+
+label,
+legend {
+  color: #334155;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+label {
+  display: grid;
+  gap: 8px;
+}
+
+input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #cbd5df;
+  border-radius: 6px;
+  background: #fff;
+  color: #17202a;
+  padding: 10px 12px;
+  outline: none;
+}
+
+input:focus {
+  border-color: #1e7a6a;
+  box-shadow: 0 0 0 3px rgba(30, 122, 106, 0.14);
+}
+
+.api-field {
+  width: min(360px, 100%);
+}
+
+.workspace {
+  display: grid;
+  gap: 20px;
+}
+
+.tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 20px;
+  border: 1px solid #d8e0e7;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.tabs button {
+  min-height: 38px;
+  background: transparent;
+  color: #334155;
+  padding: 0 14px;
+}
+
+.tabs button.active {
+  background: #1e7a6a;
+  color: #fff;
+}
+
+.fight-form {
+  display: grid;
+  gap: 18px;
+}
+
+.fighter-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.fighter-card,
+.result-panel {
+  border: 1px solid #d8e0e7;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+}
+
+.fighter-card {
+  display: grid;
+  gap: 18px;
+  margin: 0;
+  padding: 20px;
+}
+
+.fighter-card legend {
+  padding: 0 4px;
+  color: #17202a;
+  font-size: 18px;
+}
+
+.odds-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.check-row input {
+  width: 18px;
+  min-height: 18px;
+}
+
+button {
+  min-height: 46px;
+  border: 0;
+  border-radius: 6px;
+  background: #1e7a6a;
+  color: #fff;
+  padding: 0 18px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
+.result-panel {
+  min-height: 172px;
+  padding: 22px;
+}
+
+.rankings-view {
+  display: grid;
+  gap: 18px;
+}
+
+.ranking-toolbar,
+.rankings-panel {
+  border: 1px solid #d8e0e7;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+}
+
+.ranking-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 20px;
+}
+
+.ranking-toolbar h2 {
+  font-size: 22px;
+}
+
+.ranking-controls {
+  display: grid;
+  grid-template-columns: 92px 120px auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.rankings-panel {
+  min-height: 260px;
+  padding: 18px;
+}
+
+.ranking-meta {
+  margin-bottom: 12px;
+  color: #607080;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+th,
+td {
+  padding: 12px 10px;
+  border-bottom: 1px solid #e6edf3;
+  text-align: left;
+  white-space: nowrap;
+}
+
+th {
+  color: #607080;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+td:first-child,
+th:first-child {
+  width: 72px;
+}
+
+tbody tr:hover {
+  background: #f7fafc;
+}
+
+.result-panel.empty,
+.status-line {
+  display: grid;
+  place-items: center;
+  color: #64748b;
+}
+
+.result-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.result-summary strong {
+  color: #1e7a6a;
+  font-size: 24px;
+}
+
+.probability-list {
+  display: grid;
+  gap: 16px;
+}
+
+.probability-row {
+  display: grid;
+  gap: 8px;
+}
+
+.probability-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.meter {
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e6edf3;
+}
+
+.meter-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: #1e7a6a;
+}
+
+.error-text {
+  color: #b42318;
+  font-weight: 800;
+}
+
+@media (max-width: 760px) {
+  .page {
+    width: min(100vw - 28px, 1120px);
+    padding-top: 18px;
+  }
+
+  .page-header,
+  .actions,
+  .result-summary,
+  .ranking-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .fighter-grid,
+  .odds-grid,
+  .ranking-controls {
+    grid-template-columns: 1fr;
+  }
+}
