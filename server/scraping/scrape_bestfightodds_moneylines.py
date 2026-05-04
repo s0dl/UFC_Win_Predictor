@@ -22,6 +22,8 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 
+from scraping_common import CACHE_DIR
+
 
 BASE_URL = "https://www.bestfightodds.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -412,7 +414,7 @@ def main() -> None:
     parser.add_argument("--min-date", type=str, default="2007-01-01")
     parser.add_argument("--search-top-n", type=int, default=3)
     parser.add_argument("--discovered-urls-output", type=Path, default=None)
-    parser.add_argument("--output", type=Path, default=Path("bestfightodds_moneylines.csv"))
+    parser.add_argument("--output", type=Path, default=CACHE_DIR / "bestfightodds_moneylines.csv")
     parser.add_argument("--delay", type=float, default=1.0)
     parser.add_argument("--resume", action="store_true", help="Skip event URLs already present in the output CSV.")
     args = parser.parse_args()

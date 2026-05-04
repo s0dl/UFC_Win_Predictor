@@ -22,12 +22,11 @@ from tqdm import tqdm
 from urllib3.util.retry import Retry
 
 import scrape_ufc_stats_library as lib
+from scraping_common import CACHE_DIR, DATA_DIR, write_csv_atomic
 
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = SCRIPT_DIR.parents[1]
-DEFAULT_OUTPUT = REPO_ROOT / "server" / "models" / "data" / "ufc-fighters-statistics.csv"
-DEFAULT_FIGHTER_DETAILS = SCRIPT_DIR / "ufc_fighter_details.csv"
+DEFAULT_OUTPUT = DATA_DIR / "ufc-fighters-statistics.csv"
+DEFAULT_FIGHTER_DETAILS = CACHE_DIR / "ufc_fighter_details.csv"
 DEFAULT_DELAY_SECONDS = 0.15
 
 
@@ -151,18 +150,6 @@ def coerce_column_types(df: pd.DataFrame) -> pd.DataFrame:
         cleaned[column] = pd.to_numeric(cleaned[column], errors="coerce")
 
     return cleaned
-
-
-def write_csv_atomic(df: pd.DataFrame, output_path: Path, backup: bool) -> None:
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    if backup and output_path.exists():
-        backup_path = output_path.with_suffix(output_path.suffix + ".bak")
-        backup_path.write_bytes(output_path.read_bytes())
-
-    tmp_path = output_path.with_suffix(output_path.suffix + ".tmp")
-    df.to_csv(tmp_path, index=False)
-    tmp_path.replace(output_path)
 
 
 def parse_args() -> argparse.Namespace:

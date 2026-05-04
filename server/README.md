@@ -14,7 +14,7 @@ This folder contains the backend-ready project layout.
 From the repository root:
 
 ```bash
-conda run -n ufc uvicorn server.api.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn server.api.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 Health check:
@@ -45,7 +45,7 @@ You can pass odds when known:
 }
 ```
 
-## Update Fighter Statistics
+## Update Data CSVs
 
 Refresh `models/data/ufc-fighters-statistics.csv` from UFCStats:
 
@@ -56,8 +56,22 @@ conda run -n ufc python server/scraping/update_fighter_statistics.py
 For a faster append-only update that scrapes only newly discovered fighter names:
 
 ```bash
-conda run -n ufc python server/scraping/update_fighter_statistics.py --only-new
+python server/scraping/update_fighter_statistics.py --only-new
 ```
 
 The updater writes a `.bak` copy before replacing the CSV. Use `--dry-run` to
 discover and scrape without writing files.
+
+Refresh the other current data CSVs:
+
+```bash
+python server/scraping/update_ufc_fight_stats.py
+python server/scraping/update_ufc_fight_results_with_odds.py
+python server/scraping/update_ufc_fight_data.py
+python server/scraping/update_paired_fight_data.py
+```
+
+Scraper intermediates live in `scraping/cache/`. `update_ufc_fight_stats.py`
+maintains the UFCStats cache files needed by the odds join.
+`update_ufc_fight_results_with_odds.py` uses the existing BestFightOdds
+moneyline cache by default; pass `--refresh-odds` to re-scrape it.

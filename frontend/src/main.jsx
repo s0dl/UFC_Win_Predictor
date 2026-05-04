@@ -330,10 +330,6 @@ function App() {
           <p className="eyebrow">Fight model</p>
           <h1>UFC Fight Predictor</h1>
         </div>
-        <label className="api-field">
-          API URL
-          <input value={apiUrl} onChange={(event) => setApiUrl(event.target.value)} />
-        </label>
       </header>
 
       <nav className="tabs" aria-label="Views">

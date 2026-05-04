@@ -14,6 +14,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from scraping_common import CACHE_DIR, DATA_DIR
+
 
 def clean_name(value: object) -> str:
     text = str(value).lower().strip().replace(".", "").replace("'", "")
@@ -215,10 +217,10 @@ def build_results_with_odds(results_path: Path, events_path: Path, odds_path: Pa
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--results", type=Path, default=Path("ufc_fight_results.csv"))
-    parser.add_argument("--events", type=Path, default=Path("ufc_event_details.csv"))
-    parser.add_argument("--odds", type=Path, default=Path("bestfightodds_moneylines_full_open_close.csv"))
-    parser.add_argument("--output", type=Path, default=Path("../models/data/ufc_fight_results_with_odds.csv"))
+    parser.add_argument("--results", type=Path, default=CACHE_DIR / "ufc_fight_results.csv")
+    parser.add_argument("--events", type=Path, default=CACHE_DIR / "ufc_event_details.csv")
+    parser.add_argument("--odds", type=Path, default=CACHE_DIR / "bestfightodds_moneylines_full_open_close.csv")
+    parser.add_argument("--output", type=Path, default=DATA_DIR / "ufc_fight_results_with_odds.csv")
     args = parser.parse_args()
 
     merged = build_results_with_odds(args.results, args.events, args.odds, args.output)

@@ -8,6 +8,8 @@ pyyaml>=6.0,<7.0
 requests>=2.32,<3.0
 shap>=0.51,<1.0
 tqdm>=4.66,<5.0
+PyYAML==6.0.2
+urllib3>=2.5.0
 
 # Keep torch separate if you do not need the PyTorch notebook/training path.
 torch>=2.0
