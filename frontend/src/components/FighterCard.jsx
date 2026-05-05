@@ -32,7 +32,7 @@ function FighterCard({
           Closing line
           <input
             inputMode="numeric"
-            placeholder="130"
+            placeholder="+130"
             value={closeOdds}
             onChange={(event) => onCloseOddsChange(event.target.value)}
           />

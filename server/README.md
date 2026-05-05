@@ -17,6 +17,12 @@ From the repository root:
 uvicorn server.api.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+If running the Vite frontend separately, allow that local origin:
+
+```bash
+CORS_ALLOW_ORIGINS=http://localhost:5173 uvicorn server.api.main:app --reload --host 0.0.0.0 --port 8000
+```
+
 Health check:
 
 ```bash

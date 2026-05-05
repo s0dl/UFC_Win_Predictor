@@ -55,3 +55,9 @@ variable "max_instances" {
   type        = number
   default     = 3
 }
+
+variable "custom_domain" {
+    description = "Custom domain mapped to the Cloud Run app. Leave empty to disable."
+    type        = string
+    default     = ""
+  }

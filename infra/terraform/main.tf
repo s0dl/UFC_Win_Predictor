@@ -3,6 +3,22 @@ provider "google" {
   region  = var.region
 }
 
+data "google_project" "project" {}
+
+  resource "google_cloud_run_domain_mapping" "app" {
+    count    = var.custom_domain == "" ? 0 : 1
+    name     = var.custom_domain
+    location = google_cloud_run_v2_service.app.location
+
+    metadata {
+      namespace = data.google_project.project.project_id
+    }
+
+    spec {
+      route_name = google_cloud_run_v2_service.app.name
+    }
+  }
+
 resource "google_project_service" "run" {
   project            = var.project_id
   service            = "run.googleapis.com"

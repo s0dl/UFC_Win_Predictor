@@ -7,6 +7,7 @@ import time
 from collections import defaultdict, deque
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -17,6 +18,11 @@ STATIC_ROOT = SERVER_ROOT / "static"
 RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "120"))
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
 RATE_LIMIT_EXEMPT_PATHS = {"/", "/health", "/api/health"}
+cors_origins = [
+    origin.strip()
+    for origin in os.getenv("CORS_ALLOW_ORIGINS", "").split(",")
+    if origin.strip()
+]
 if str(SERVER_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVER_ROOT))
 
@@ -25,6 +31,15 @@ from models.ufc_xgboost import get_predictor
 
 app = FastAPI(title="UFC Fight Predictor")
 request_log: defaultdict[str, deque[float]] = defaultdict(deque)
+
+if cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Content-Type"],
+    )
 
 
 def client_key(request: Request) -> str:
