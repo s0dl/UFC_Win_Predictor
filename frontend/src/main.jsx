@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
@@ -81,10 +81,68 @@ function ProbabilityBar({ name, display }) {
   );
 }
 
+function FighterSearchInput({ value, onChange, fighters }) {
+  const [open, setOpen] = useState(false);
+  const query = value.trim().toLowerCase();
+  const matches = useMemo(() => {
+    if (!fighters.length) return [];
+
+    const ranked = fighters
+      .filter((fighter) => fighter.name.toLowerCase().includes(query))
+      .sort((left, right) => {
+        const leftName = left.name.toLowerCase();
+        const rightName = right.name.toLowerCase();
+        const leftStarts = leftName.startsWith(query) ? 0 : 1;
+        const rightStarts = rightName.startsWith(query) ? 0 : 1;
+        return leftStarts - rightStarts || left.name.localeCompare(right.name);
+      });
+
+    return ranked.slice(0, 8);
+  }, [fighters, query]);
+
+  function selectFighter(fighter) {
+    onChange(fighter);
+    setOpen(false);
+  }
+
+  return (
+    <div className="fighter-search">
+      <input
+        autoComplete="off"
+        value={value}
+        onBlur={() => setOpen(false)}
+        onChange={(event) => {
+          onChange(event.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        required
+      />
+      {open && matches.length > 0 && (
+        <div className="fighter-menu">
+          {matches.map((fighter) => (
+            <button
+              key={fighter.key}
+              className="fighter-option"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => selectFighter(fighter.name)}
+              type="button"
+            >
+              <span>{fighter.name}</span>
+              <span>{fighter.prior_fights} fights</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FighterCard({
   title,
   name,
   onNameChange,
+  fighters,
   openOdds,
   onOpenOddsChange,
   closeOdds,
@@ -95,7 +153,7 @@ function FighterCard({
       <legend>{title}</legend>
       <label>
         Name
-        <input value={name} onChange={(event) => onNameChange(event.target.value)} required />
+        <FighterSearchInput fighters={fighters} value={name} onChange={onNameChange} />
       </label>
       <div className="odds-grid">
         <label>
@@ -122,6 +180,7 @@ function FighterCard({
 }
 
 function PredictView({ apiUrl }) {
+  const [fighters, setFighters] = useState([]);
   const [fighter1, setFighter1] = useState("Islam Makhachev");
   const [fighter2, setFighter2] = useState("Charles Oliveira");
   const [fighter1Open, setFighter1Open] = useState("");
@@ -132,6 +191,42 @@ function PredictView({ apiUrl }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadFighters() {
+      try {
+        const response = await fetch(`${apiUrl.replace(/\/$/, "")}/fighters`);
+        const data = await response.json();
+        if (!response.ok) return;
+        if (!ignore) {
+          const fighterOptions = Array.isArray(data.fighters)
+            ? data.fighters
+                .map((fighter) => {
+                  if (typeof fighter === "string") {
+                    return { name: fighter, key: fighter, prior_fights: 0 };
+                  }
+                  return {
+                    name: fighter.name,
+                    key: fighter.key || fighter.name,
+                    prior_fights: fighter.prior_fights ?? 0,
+                  };
+                })
+                .filter((fighter) => fighter.name)
+            : [];
+          setFighters(fighterOptions);
+        }
+      } catch {
+        if (!ignore) setFighters([]);
+      }
+    }
+
+    loadFighters();
+    return () => {
+      ignore = true;
+    };
+  }, [apiUrl]);
 
   const canSubmit = useMemo(
     () => fighter1.trim().length > 0 && fighter2.trim().length > 0 && !loading,
@@ -180,6 +275,7 @@ function PredictView({ apiUrl }) {
             title="Fighter 1"
             name={fighter1}
             onNameChange={setFighter1}
+            fighters={fighters}
             openOdds={fighter1Open}
             onOpenOddsChange={setFighter1Open}
             closeOdds={fighter1Close}
@@ -189,6 +285,7 @@ function PredictView({ apiUrl }) {
             title="Fighter 2"
             name={fighter2}
             onNameChange={setFighter2}
+            fighters={fighters}
             openOdds={fighter2Open}
             onOpenOddsChange={setFighter2Open}
             closeOdds={fighter2Close}
@@ -216,140 +313,19 @@ function PredictView({ apiUrl }) {
   );
 }
 
-function RankingsView({ apiUrl }) {
-  const [limit, setLimit] = useState(5000);
-  const [rankings, setRankings] = useState([]);
-  const [total, setTotal] = useState(0);
-  const [benchmarkCount, setBenchmarkCount] = useState(10);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  async function loadRankings() {
-    setLoading(true);
-    setError("");
-    try {
-      const baseUrl = apiUrl.replace(/\/$/, "");
-      const response = await fetch(`${baseUrl}/rankings?limit=${limit}&benchmark_count=${benchmarkCount}`);
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.detail || "Could not load rankings.");
-      }
-      setRankings(data.rankings || []);
-      setTotal(data.total || 0);
-    } catch (requestError) {
-      setRankings([]);
-      setTotal(0);
-      setError(requestError.message || "Could not reach the prediction server.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <section className="rankings-view">
-      <div className="ranking-toolbar">
-        <div>
-          <p className="eyebrow">Model leaderboard</p>
-          <h2>All fighters ranked by benchmark score</h2>
-        </div>
-        <div className="ranking-controls">
-          <label>
-            Show
-            <input
-              inputMode="numeric"
-              value={limit}
-              onChange={(event) => setLimit(event.target.value)}
-            />
-          </label>
-          <label>
-            Benchmarks
-            <input
-              inputMode="numeric"
-              value={benchmarkCount}
-              onChange={(event) => setBenchmarkCount(event.target.value)}
-            />
-          </label>
-          <button onClick={loadRankings} disabled={loading}>
-            {loading ? "Ranking..." : "Load rankings"}
-          </button>
-        </div>
-      </div>
-
-      <section className="rankings-panel">
-        {error && <div className="error-text">{error}</div>}
-        {!error && !loading && rankings.length === 0 && (
-          <div className="status-line">Load rankings to see the model's fighter leaderboard.</div>
-        )}
-        {loading && <div className="status-line">Scoring fighters against benchmark panel...</div>}
-        {!loading && rankings.length > 0 && (
-          <>
-            <div className="ranking-meta">
-              Showing {rankings.length} of {total} rankable fighters.
-            </div>
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Rank</th>
-                    <th>Fighter</th>
-                    <th>Score</th>
-                    <th>Benchmark wins</th>
-                    <th>Prior fights</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rankings.map((row) => (
-                    <tr key={row.rank}>
-                      <td>{row.rank}</td>
-                      <td>{row.fighter}</td>
-                      <td>{formatPercent(row.model_score)}</td>
-                      <td>
-                        {row.benchmark_wins}/{row.benchmark_count}
-                      </td>
-                      <td>{row.prior_fights}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-      </section>
-    </section>
-  );
-}
-
 function App() {
-  const [apiUrl, setApiUrl] = useState(DEFAULT_API_URL);
-  const [activeView, setActiveView] = useState("predict");
+  const [apiUrl] = useState(DEFAULT_API_URL);
 
   return (
     <main className="page">
       <header className="page-header">
         <div>
-          <p className="eyebrow">Fight model</p>
+          <p className="eyebrow">Fight night model</p>
           <h1>UFC Fight Predictor</h1>
         </div>
       </header>
 
-      <nav className="tabs" aria-label="Views">
-        <button
-          className={activeView === "predict" ? "active" : ""}
-          onClick={() => setActiveView("predict")}
-          type="button"
-        >
-          Predict
-        </button>
-        <button
-          className={activeView === "rankings" ? "active" : ""}
-          onClick={() => setActiveView("rankings")}
-          type="button"
-        >
-          Rankings
-        </button>
-      </nav>
-
-      {activeView === "predict" ? <PredictView apiUrl={apiUrl} /> : <RankingsView apiUrl={apiUrl} />}
+      <PredictView apiUrl={apiUrl} />
     </main>
   );
 }
