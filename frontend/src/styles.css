@@ -22,7 +22,7 @@ body {
 
 body::before {
   position: fixed;
-  z-index: -1;
+  z-index: 0;
   top: 50%;
   left: 50%;
   width: min(680px, 82vw);
@@ -36,6 +36,12 @@ body::before {
     #050505;
   border: 2px solid rgba(255, 255, 255, 0.04);
   opacity: 0.78;
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
 }
 
 button,
