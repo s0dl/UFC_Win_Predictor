@@ -1,0 +1,5 @@
+project_id = "your-gcp-project-id"
+region     = "us-central1"
+image      = "us-central1-docker.pkg.dev/your-gcp-project-id/ufc/ufc-app:latest"
+
+deletion_protection = false

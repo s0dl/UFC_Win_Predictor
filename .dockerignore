@@ -1,0 +1,17 @@
+.git
+.vscode
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ipynb_checkpoints
+
+frontend/node_modules
+frontend/dist
+
+server/models/notebooks
+server/models/reports
+server/original_repo
+server/scraping/cache
+
+*.bak
+*.tmp

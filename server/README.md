@@ -23,10 +23,30 @@ Health check:
 curl http://localhost:8000/health
 ```
 
+## Run With Docker
+
+From the repository root:
+
+```bash
+docker compose up --build
+```
+
+Open the frontend at:
+
+```text
+http://localhost:8080
+```
+
+The API is available from the same container:
+
+```text
+http://localhost:8080/api
+```
+
 Prediction:
 
 ```bash
-curl -X POST http://localhost:8000/predict \
+curl -X POST http://localhost:8080/api/predict \
   -H "Content-Type: application/json" \
   -d '{"fighter1":"Islam Makhachev","fighter2":"Charles Oliveira"}'
 ```

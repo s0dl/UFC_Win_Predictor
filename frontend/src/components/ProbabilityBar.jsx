@@ -1,3 +1,5 @@
+import React from "react";
+
 function ProbabilityBar({ name, display }) {
   return (
     <div className="probability-row">
