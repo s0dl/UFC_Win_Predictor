@@ -129,12 +129,17 @@ under `server/scraping/cache`.
 Useful update commands:
 
 ```bash
+python server/scraping/update_next_ufc_event_card.py
 python server/scraping/update_fighter_statistics.py
 python server/scraping/update_ufc_fight_stats.py
 python server/scraping/update_ufc_fight_results_with_odds.py
 python server/scraping/update_ufc_fight_data.py
 python server/scraping/update_paired_fight_data.py
 ```
+
+`update_next_ufc_event_card.py` writes `server/models/data/ufc_next_event_card.csv`.
+The app reads that file at runtime for the next-event edge table; it does not
+scrape BestFightOdds during user requests.
 
 ## Deployment
 
@@ -173,11 +178,107 @@ terraform plan
 terraform apply
 ```
 
-## Model Notes
+## Methodology
 
-The production API loads saved XGBoost artifacts from
-`server/models/artifacts`. Predictions use fighter career features, recent fight
-history, rolling performance stats, and optional moneyline odds.
+### Data Sources
+
+The project uses two public data sources:
+
+- **UFCStats** for fight results, fight-level round stats, fighter bio data, and
+  career summary statistics.
+- **BestFightOdds** for opening and current/closing moneyline prices where they
+  are available.
+
+The update scripts normalize these sources into CSVs under `server/models/data`.
+Historical scrape intermediates are kept under `server/scraping/cache` so odds
+and UFCStats joins can be resumed or rebuilt without starting from scratch every
+time.
+
+### Feature Construction
+
+The XGBoost model is trained from paired fighter rows. Each matchup is converted
+into a fighter-vs-opponent feature vector containing:
+
+- Fighter career attributes such as age, height, reach, stance, record, striking
+  rates, takedown rates, and submission rates.
+- Opponent career attributes using the same schema.
+- Rolling fight-history features over recent UFC fights, including striking,
+  grappling, control, knockdowns, submission attempts, reversals, and recent win
+  rate.
+- Difference features, such as fighter career stat minus opponent career stat.
+- Opening and closing/current moneyline odds when present.
+- An `odds_inferred` flag for rows where odds had to be inferred or were not
+  directly matched.
+
+For inference, the API predicts the matchup in both directions, averages the
+two perspectives, and returns normalized win probabilities for each fighter.
+
+### Current Fighter List
+
+The searchable fighter list is sourced from the current fighter statistics CSV,
+not only the training artifact. This means newly scraped fighters can appear in
+the app before a full retrain. If a fighter has career stats but no usable
+rolling-history row in the saved model artifacts, the API fills rolling features
+with zeroes. That keeps inference available, but those predictions are less
+informed than predictions for fighters with established UFC history in the
+training data.
+
+### Next Event Edge Table
+
+The next-event table is cache-driven:
+
+```bash
+python server/scraping/update_next_ufc_event_card.py
+```
+
+That command discovers upcoming UFC cards from BestFightOdds' latest odds page
+and writes `server/models/data/ufc_next_event_card.csv`. The API endpoint
+`/api/next-event/edges` reads that file, runs model predictions for each fight,
+and returns the card sorted by `importance_order`, where `1` is the main event.
+
+The endpoint does not scrape external sites at request time. To update the card
+or prices, rerun the update script and redeploy/restart with the refreshed CSV.
+
+### Edge Calculation
+
+For each fight, the API converts the current American moneylines into implied
+probabilities and removes the sportsbook vig by normalizing both sides:
+
+```text
+raw_implied_a = american_to_probability(line_a)
+raw_implied_b = american_to_probability(line_b)
+no_vig_a = raw_implied_a / (raw_implied_a + raw_implied_b)
+no_vig_b = raw_implied_b / (raw_implied_a + raw_implied_b)
+```
+
+The displayed edge is:
+
+```text
+edge = model_probability - no_vig_implied_probability
+```
+
+The app flags a side as having an edge when the edge is at least 5 percentage
+points. It also reports a simple Kelly-style fraction:
+
+```text
+kelly_fraction = edge / (1 - no_vig_implied_probability)
+```
+
+This is shown as a sizing signal, not as betting advice.
+
+### Limitations
+
+- The model depends on data freshness. New fighters can be listed before the
+  model artifacts are retrained, but predictions for those fighters may be less
+  reliable.
+- Public odds pages can change layout, naming, ordering, and availability. The
+  cache script should be checked after major source-site changes.
+- Moneyline movement is treated as a feature, but the model does not understand
+  late injury news, short-notice replacements, weigh-in context, or non-quantified
+  qualitative information.
+- Model probabilities are estimates, not guarantees. Calibration can drift as
+  the roster, rules environment, judging trends, and betting market behavior
+  change.
 
 This is a sports prediction tool, not betting advice. Model output should be
 treated as an estimate based on available historical data and feature quality.
