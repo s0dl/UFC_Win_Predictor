@@ -127,7 +127,8 @@ def clean_cached_value(value: Any) -> Any:
     return None if pd.isna(value) else value
 
 
-def cached_next_event_card(path: Path = NEXT_EVENT_CARD_PATH) -> dict[str, Any]:
+def cached_next_event_card(path: Path | None = None) -> dict[str, Any]:
+    path = path or NEXT_EVENT_CARD_PATH
     if not path.exists():
         raise FileNotFoundError(
             f"{path} was not found. Run `python server/scraping/update_next_ufc_event_card.py` first."

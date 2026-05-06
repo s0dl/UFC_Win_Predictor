@@ -23,6 +23,7 @@ function App() {
 
       <footer className="page-footer">
         <a href={METHODOLOGY_URL}>Methodology</a>
+        <span>Not betting advice.</span>
       </footer>
     </main>
   );

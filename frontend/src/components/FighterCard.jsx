@@ -29,7 +29,7 @@ function FighterCard({
           />
         </label>
         <label>
-          Closing line
+          Current line
           <input
             inputMode="numeric"
             placeholder="+130"

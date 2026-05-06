@@ -13,3 +13,8 @@ infra/terraform/terraform.tfstate
 infra/terraform/terraform.tfstate.backup
 
 __pycache__
+
+.pytest_cache
+
+.agents
+.codex

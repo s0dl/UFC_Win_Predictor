@@ -17,11 +17,13 @@ single-container production deployment.
 
 - Searchable fighter dropdown powered by the model's known fighter database
 - Fight winner prediction with per-fighter win probabilities
-- Optional opening and closing moneyline inputs
+- Optional opening and current moneyline inputs
+- Next-event edge table comparing model probability with no-vig market prices
 - FastAPI inference API backed by saved XGBoost artifacts
 - Scraper/update scripts for UFCStats and BestFightOdds-derived CSVs
 - Dockerized single-container app serving frontend and backend together
 - Terraform configuration for Google Cloud Run
+- GitHub Actions CI for backend tests, frontend builds, and Docker builds
 - Basic per-IP rate limiting for API routes
 
 ## Stack
@@ -140,6 +142,30 @@ python server/scraping/update_paired_fight_data.py
 `update_next_ufc_event_card.py` writes `server/models/data/ufc_next_event_card.csv`.
 The app reads that file at runtime for the next-event edge table; it does not
 scrape BestFightOdds during user requests.
+
+## Tests And CI
+
+Run the backend checks locally:
+
+```bash
+python -m pip install -r server/requirements.txt pytest
+python -m compileall server/api server/models server/scraping
+pytest server/tests
+```
+
+Run the frontend build check:
+
+```bash
+cd frontend
+npm ci
+npm run build
+```
+
+The GitHub Actions workflow in `.github/workflows/ci.yml` runs the same core
+checks on pushes and pull requests to `main`: backend dependency install,
+backend compile, focused pytest coverage, frontend dependency install, and
+frontend production build. It also verifies that the production Docker image
+builds successfully.
 
 ## Deployment
 
@@ -290,11 +316,11 @@ treated as an estimate based on available historical data and feature quality.
 - Rate limiting is enabled in FastAPI
 - CORS is disabled unless `CORS_ALLOW_ORIGINS` is set for local development
 - Cloud Run scaling limits are managed through Terraform
+- The UI footer links to the methodology and states that model output is not
+  betting advice.
 
 ## Future Improvements
 
-- Add automated API/model tests
-- Add CI for frontend build, backend compile, and Docker build
 - Add model metrics and calibration summary to this README
 - Add screenshot or GIF of the deployed app
-- Add custom domain once the demo URL is finalized
+- Add end-to-end smoke tests against the Docker container

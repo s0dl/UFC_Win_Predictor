@@ -381,11 +381,14 @@ button:disabled {
 
 .page-footer {
   display: flex;
+  align-items: center;
   justify-content: center;
+  gap: 12px;
   padding-top: 26px;
 }
 
-.page-footer a {
+.page-footer a,
+.page-footer span {
   color: #a8a8a8;
   font-size: 13px;
   font-weight: 900;
