@@ -21,7 +21,7 @@ jobs:
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r server/requirements.txt pytest
+          python -m pip install -r server/requirements.txt pytest httpx
 
       - name: Compile backend
         run: python -m compileall server/api server/models server/scraping
