@@ -144,10 +144,9 @@ Build and push the production image:
 PROJECT_ID=your-gcp-project-id
 REGION=us-central1
 REPO=$REGION-docker.pkg.dev/$PROJECT_ID/ufc
-TAG=$(date +%Y%m%d%H%M%S)
 
-docker build -f Dockerfile -t $REPO/ufc-app:$TAG .
-docker push $REPO/ufc-app:$TAG
+docker build -f Dockerfile -t $REPO/ufc-app .
+docker push $REPO/ufc-app
 ```
 
 Deploy with Terraform:

@@ -31,6 +31,7 @@ RUN pip install --upgrade pip \
 COPY server/api /app/server/api
 COPY server/models/__init__.py /app/server/models/__init__.py
 COPY server/models/ufc_xgboost.py /app/server/models/ufc_xgboost.py
+COPY server/models/data /app/server/models/data
 COPY server/models/artifacts /app/server/models/artifacts
 COPY --from=frontend-build /frontend/dist /app/server/static
 

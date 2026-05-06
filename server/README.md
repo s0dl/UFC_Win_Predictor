@@ -76,7 +76,7 @@ You can pass odds when known:
 Refresh `models/data/ufc-fighters-statistics.csv` from UFCStats:
 
 ```bash
-conda run -n ufc python server/scraping/update_fighter_statistics.py
+python server/scraping/update_fighter_statistics.py
 ```
 
 For a faster append-only update that scrapes only newly discovered fighter names:
@@ -91,11 +91,21 @@ discover and scrape without writing files.
 Refresh the other current data CSVs:
 
 ```bash
+python server/scraping/update_next_ufc_event_card.py
 python server/scraping/update_ufc_fight_stats.py
 python server/scraping/update_ufc_fight_results_with_odds.py
 python server/scraping/update_ufc_fight_data.py
 python server/scraping/update_paired_fight_data.py
 ```
+
+`update_next_ufc_event_card.py` writes
+`models/data/ufc_next_event_card.csv`, which `/api/next-event/edges` reads at
+runtime. The API does not scrape BestFightOdds during requests. This updater
+discovers UFC cards from BestFightOdds' latest odds page because the archive
+contains completed events. By default the script treats the top fight on the
+BestFightOdds event page as the main event and writes `importance_order=1` for
+that fight; pass `--main-event-position bottom` if a source page is listed
+prelim-first.
 
 Scraper intermediates live in `scraping/cache/`. `update_ufc_fight_stats.py`
 maintains the UFCStats cache files needed by the odds join.

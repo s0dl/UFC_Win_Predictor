@@ -5,7 +5,9 @@ from pathlib import Path
 import sys
 import time
 from collections import defaultdict, deque
+from typing import Any
 
+import pandas as pd
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -15,6 +17,7 @@ from pydantic import BaseModel
 
 SERVER_ROOT = Path(__file__).resolve().parents[1]
 STATIC_ROOT = SERVER_ROOT / "static"
+NEXT_EVENT_CARD_PATH = SERVER_ROOT / "models" / "data" / "ufc_next_event_card.csv"
 RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "120"))
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
 RATE_LIMIT_EXEMPT_PATHS = {"/", "/health", "/api/health"}
@@ -79,6 +82,133 @@ class PredictionRequest(BaseModel):
     odds_inferred: int = 1
 
 
+def no_vig_probabilities(odds1: int | float | None, odds2: int | float | None) -> tuple[float | None, float | None]:
+    if odds1 is None or odds2 is None:
+        return None, None
+    raw1 = american_to_implied_probability(int(odds1))
+    raw2 = american_to_implied_probability(int(odds2))
+    total = raw1 + raw2
+    if total <= 0:
+        return None, None
+    return raw1 / total, raw2 / total
+
+
+def edge_payload(model_probability: float, implied_probability: float | None) -> dict[str, Any]:
+    if implied_probability is None:
+        return {
+            "implied_probability_no_vig": None,
+            "edge": None,
+            "kelly_fraction": None,
+            "has_edge": False,
+        }
+
+    edge = model_probability - implied_probability
+    denominator = 1.0 - implied_probability
+    kelly_fraction = edge / denominator if denominator > 0 else None
+    return {
+        "implied_probability_no_vig": implied_probability,
+        "edge": edge,
+        "kelly_fraction": kelly_fraction,
+        "has_edge": edge >= 0.05,
+    }
+
+
+def comparable_edge(edge: float | None) -> float:
+    return edge if edge is not None else -1.0
+
+
+def american_to_implied_probability(odds: int) -> float:
+    if odds > 0:
+        return 100.0 / (odds + 100.0)
+    return abs(odds) / (abs(odds) + 100.0)
+
+
+def clean_cached_value(value: Any) -> Any:
+    return None if pd.isna(value) else value
+
+
+def cached_next_event_card(path: Path = NEXT_EVENT_CARD_PATH) -> dict[str, Any]:
+    if not path.exists():
+        raise FileNotFoundError(
+            f"{path} was not found. Run `python server/scraping/update_next_ufc_event_card.py` first."
+        )
+
+    df = pd.read_csv(path)
+    if df.empty:
+        raise ValueError(f"{path} does not contain any cached fights.")
+
+    df = df.sort_values("importance_order", kind="stable")
+    first = df.iloc[0]
+    fights = []
+    for _, row in df.iterrows():
+        fights.append(
+            {
+                column: clean_cached_value(row[column])
+                for column in df.columns
+                if column not in {"event", "date", "source_url", "scraped_at"}
+            }
+        )
+
+    return {
+        "event": clean_cached_value(first.get("event")),
+        "date": clean_cached_value(first.get("date")),
+        "source_url": clean_cached_value(first.get("source_url")),
+        "scraped_at": clean_cached_value(first.get("scraped_at")),
+        "fights": fights,
+    }
+
+
+def upcoming_event_edges() -> dict[str, Any]:
+    card = cached_next_event_card()
+    predictor = get_predictor()
+    enriched_fights = []
+
+    for fight in card["fights"]:
+        try:
+            fighter1 = predictor.resolve_fighter_name(str(fight["fighter1"]))
+            fighter2 = predictor.resolve_fighter_name(str(fight["fighter2"]))
+            current1 = fight.get("fighter1_current_odds")
+            current2 = fight.get("fighter2_current_odds")
+            open1 = fight.get("fighter1_open_odds")
+            open2 = fight.get("fighter2_open_odds")
+            prediction = predictor.predict(
+                fighter1=fighter1,
+                fighter2=fighter2,
+                fighter1_open_odds=open1,
+                fighter2_open_odds=open2,
+                fighter1_close_odds=current1,
+                fighter2_close_odds=current2,
+                odds_inferred=0 if current1 is not None and current2 is not None else 1,
+            ).as_dict()
+            implied1, implied2 = no_vig_probabilities(current1, current2)
+            fighter1_edge = edge_payload(prediction["fighter1_win_probability"], implied1)
+            fighter2_edge = edge_payload(prediction["fighter2_win_probability"], implied2)
+            recommended_side = (
+                fighter1
+                if comparable_edge(fighter1_edge["edge"]) >= comparable_edge(fighter2_edge["edge"])
+                else fighter2
+            )
+            recommended_edge = fighter1_edge if recommended_side == fighter1 else fighter2_edge
+            enriched_fights.append(
+                {
+                    **fight,
+                    "fighter1": fighter1,
+                    "fighter2": fighter2,
+                    "prediction": prediction,
+                    "fighter1_edge": fighter1_edge,
+                    "fighter2_edge": fighter2_edge,
+                    "recommended_side": recommended_side,
+                    "recommended_edge": recommended_edge,
+                    "model_error": None,
+                }
+            )
+        except ValueError as exc:
+            enriched_fights.append({**fight, "prediction": None, "model_error": str(exc)})
+
+    payload = {**card, "fights": enriched_fights, "edge_threshold": 0.05}
+    return payload
+
+
 @app.get("/health")
 @app.get("/api/health")
 def health() -> dict[str, str]:
@@ -112,6 +242,17 @@ def rankings(limit: int = 5000, benchmark_count: int = 10) -> dict:
         "total": len(ranked),
         "rankings": [item.as_dict() for item in ranked[:limit]],
     }
+
+
+@app.get("/next-event/edges")
+@app.get("/api/next-event/edges")
+def next_event_edges() -> dict:
+    try:
+        return upcoming_event_edges()
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 if (STATIC_ROOT / "assets").exists():

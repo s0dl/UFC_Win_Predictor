@@ -1,8 +1,10 @@
 import React from "react";
 import { useState } from "react";
+import NextEventEdges from "./components/NextEventEdges.jsx";
 import PredictView from "./components/PredictView.jsx";
 
 const DEFAULT_API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const METHODOLOGY_URL = import.meta.env.VITE_METHODOLOGY_URL || "#";
 
 function App() {
   const [apiUrl] = useState(DEFAULT_API_URL);
@@ -16,7 +18,12 @@ function App() {
         </div>
       </header>
 
+      <NextEventEdges apiUrl={apiUrl} />
       <PredictView apiUrl={apiUrl} />
+
+      <footer className="page-footer">
+        <a href={METHODOLOGY_URL}>Methodology</a>
+      </footer>
     </main>
   );
 }

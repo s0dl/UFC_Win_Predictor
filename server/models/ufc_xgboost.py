@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from difflib import get_close_matches
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -76,12 +77,15 @@ class UFCXGBoostPredictor:
         with open(artifact_dir / "fl_model_final.pkl", "rb") as handle:
             self.fight_history: pd.DataFrame = pickle.load(handle)
 
+        self.fighter_stats = self._load_current_fighter_stats(self.fighter_stats)
         self.roll_cols = [col for col in self.fight_history.columns if col.startswith("roll")]
         self.career_cols = [col for col in self.fighter_stats.columns if col != "name"]
         self.known_fighters = set(self.fight_history["FIGHTER"].dropna().astype(str))
         self.known_career_fighters = set(self.fighter_stats["name"].dropna().astype(str))
+        self.available_fighters = sorted(self.known_career_fighters)
         self.rankable_fighters = sorted(self.known_fighters & self.known_career_fighters)
         self.fight_counts = self.fight_history.groupby("FIGHTER").size().to_dict()
+        self.display_fight_counts = self._load_current_fight_counts(self.fight_counts)
         self.latest_history = (
             self.fight_history.dropna(subset=["FIGHTER"])
             .groupby("FIGHTER", as_index=False)
@@ -89,6 +93,52 @@ class UFCXGBoostPredictor:
             .set_index("FIGHTER")
         )
         self.career_by_name = self.fighter_stats.dropna(subset=["name"]).set_index("name")
+
+    def _load_current_fighter_stats(self, fallback: pd.DataFrame) -> pd.DataFrame:
+        csv_path = ROOT / "models" / "data" / "ufc-fighters-statistics.csv"
+        if not csv_path.exists():
+            return fallback
+
+        try:
+            stats = pd.read_csv(csv_path).drop(columns=["nickname"], errors="ignore")
+        except (OSError, pd.errors.ParserError):
+            return fallback
+
+        num_cols = stats.select_dtypes("float").columns
+        stats[num_cols] = stats[num_cols].fillna(stats[num_cols].median())
+        stats["date_of_birth"] = pd.to_datetime(stats["date_of_birth"], errors="coerce")
+        today = pd.Timestamp.today()
+        stats["age"] = stats["date_of_birth"].apply(
+            lambda date: today.year - date.year - ((today.month, today.day) < (date.month, date.day))
+            if pd.notnull(date)
+            else np.nan
+        )
+        stats = stats.drop(columns=["date_of_birth"])
+        stats["age"] = stats["age"].fillna(stats["age"].median())
+        stats["stance"] = stats["stance"].fillna("Unknown")
+        stats = pd.get_dummies(stats, columns=["stance"], prefix="stance", dtype=int)
+        stats["name"] = stats["name"].apply(clean_name)
+        return stats.reindex(columns=fallback.columns, fill_value=0)
+
+    def _load_current_fight_counts(self, fallback: dict[str, int]) -> dict[str, int]:
+        csv_path = ROOT / "models" / "data" / "ufc_fight_stats.csv"
+        if not csv_path.exists():
+            return fallback
+
+        try:
+            stats = pd.read_csv(csv_path, usecols=["EVENT", "BOUT", "FIGHTER"]).dropna(subset=["FIGHTER"])
+        except (OSError, ValueError, pd.errors.ParserError):
+            return fallback
+
+        stats["FIGHTER"] = stats["FIGHTER"].apply(clean_name)
+        counts = (
+            stats.drop_duplicates(["EVENT", "BOUT", "FIGHTER"])
+            .groupby("FIGHTER")
+            .size()
+            .astype(int)
+            .to_dict()
+        )
+        return {**fallback, **counts}
 
     def _build_row(
         self,
@@ -103,12 +153,16 @@ class UFCXGBoostPredictor:
         fighter = clean_name(fighter_name)
         opponent = clean_name(opponent_name)
 
-        if fighter not in self.known_fighters:
-            raise ValueError(f"{fighter_name!r} was not found in fight history")
+        if fighter not in self.known_career_fighters:
+            raise ValueError(f"{fighter_name!r} was not found in fighter stats")
         if opponent not in self.known_career_fighters:
             raise ValueError(f"{opponent_name!r} was not found in fighter stats")
 
-        fighter_row = self.fight_history[self.fight_history["FIGHTER"] == fighter].iloc[-1]
+        fighter_row = (
+            self.fight_history[self.fight_history["FIGHTER"] == fighter].iloc[-1]
+            if fighter in self.known_fighters
+            else None
+        )
         if opponent in self.known_fighters:
             opponent_row = self.fight_history[self.fight_history["FIGHTER"] == opponent].iloc[-1]
             opponent_rolling = {f"{col}_opp": opponent_row[col] for col in self.roll_cols}
@@ -120,7 +174,7 @@ class UFCXGBoostPredictor:
 
         row: dict[str, Any] = {}
         for col in self.roll_cols:
-            row[f"{col}_self"] = fighter_row[col]
+            row[f"{col}_self"] = fighter_row[col] if fighter_row is not None else 0.0
         row["open_odds_self"] = np.nan if open_odds is None else open_odds
         row["close_odds_self"] = np.nan if close_odds is None else close_odds
         row.update(opponent_rolling)
@@ -187,14 +241,24 @@ class UFCXGBoostPredictor:
             predicted_winner_probability=winner_probability,
         )
 
+    def resolve_fighter_name(self, name: str, cutoff: float = 0.84) -> str:
+        fighter = clean_name(name)
+        if fighter in self.available_fighters:
+            return display_name(fighter)
+
+        matches = get_close_matches(fighter, self.available_fighters, n=1, cutoff=cutoff)
+        if not matches:
+            raise ValueError(f"{name!r} was not found in model fighter data")
+        return display_name(matches[0])
+
     def list_fighters(self) -> list[dict[str, Any]]:
         return [
             {
                 "name": display_name(fighter),
                 "key": fighter,
-                "prior_fights": int(self.fight_counts.get(fighter, 0)),
+                "prior_fights": int(self.display_fight_counts.get(fighter, 0)),
             }
-            for fighter in self.rankable_fighters
+            for fighter in self.available_fighters
         ]
 
     def _benchmark_fighters(self, benchmark_count: int) -> list[str]:

@@ -176,9 +176,23 @@ def extract_event_date(soup: BeautifulSoup) -> pd.Timestamp | None:
     meta = soup.find("meta", {"name": "description"})
     content = meta.get("content", "") if meta else ""
     match = re.search(r"on ([A-Z][a-z]+ \d{1,2}, \d{4})", content)
+    if match:
+        date = pd.to_datetime(match.group(1), errors="coerce")
+        return None if pd.isna(date) else date
+
+    page_text = " ".join(
+        clean_text(tag.get_text(" ", strip=True))
+        for tag in [soup.find("h1"), soup.find("title")]
+        if tag
+    )
+    match = re.search(r"\b([A-Z][a-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?\b", page_text)
     if not match:
         return None
-    date = pd.to_datetime(match.group(1), errors="coerce")
+
+    today = pd.Timestamp.today().normalize()
+    date = pd.to_datetime(f"{match.group(1)} {match.group(2)}, {today.year}", errors="coerce")
+    if not pd.isna(date) and date < today - pd.Timedelta(days=30):
+        date = date + pd.DateOffset(years=1)
     return None if pd.isna(date) else date
 
 
@@ -307,6 +321,20 @@ def scrape_event_moneylines(url: str, session: requests.Session) -> list[dict[st
 
 def archive_ufc_event_urls(session: requests.Session) -> list[str]:
     response = get_with_retries(session, f"{BASE_URL}/archive")
+    if response is None:
+        return []
+    soup = BeautifulSoup(response.text, "html.parser")
+    urls = []
+    for link in soup.find_all("a", href=True):
+        text = clean_text(link.get_text(" ", strip=True))
+        href = link["href"]
+        if text.upper().startswith("UFC") and href.startswith("/events/"):
+            urls.append(urljoin(BASE_URL, href))
+    return list(dict.fromkeys(urls))
+
+
+def latest_ufc_event_urls(session: requests.Session) -> list[str]:
+    response = get_with_retries(session, BASE_URL)
     if response is None:
         return []
     soup = BeautifulSoup(response.text, "html.parser")
