@@ -47,7 +47,7 @@ variable "memory" {
 variable "min_instances" {
   description = "Minimum app instances."
   type        = number
-  default     = 1
+  default     = 0
 }
 
 variable "max_instances" {
