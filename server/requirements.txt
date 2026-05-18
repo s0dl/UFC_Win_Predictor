@@ -3,6 +3,7 @@
 # build paths, CUDA wheels, notebook packages, and transitive dependencies.
 
 fastapi>=0.136,<1.0
+starlette>=0.46,<1.0
 uvicorn[standard]>=0.46,<1.0
 pydantic>=2.13,<3.0
 

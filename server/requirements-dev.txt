@@ -9,9 +9,11 @@ requests>=2.32,<3.0
 shap>=0.51,<1.0
 tqdm>=4.66,<5.0
 pytest>=8.0,<9.0
-httpx>=0.36,<1.0
+httpx>=0.28,<0.29
 PyYAML==6.0.2
 urllib3>=2.5.0
 
-# Keep torch separate if you do not need the PyTorch notebook/training path.
-torch>=2.0
+# Install torch separately only if you need the PyTorch notebook/training path.
+# CUDA torch wheels are large enough to hit disk quotas during a normal dev install.
+
+torch>=2.0,<3.0

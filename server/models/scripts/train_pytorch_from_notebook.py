@@ -8,7 +8,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
-from sklearn.model_selection import train_test_split
+from pathlib import Path
+from sklearn.model_selection import GroupShuffleSplit
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import classification_report, roc_auc_score, accuracy_score
 import matplotlib.pyplot as plt
@@ -19,24 +20,31 @@ print("PyTorch:", torch.__version__)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print("Device:", device)
 
+MODEL_DIR = Path(__file__).resolve().parents[1]
+DATA_DIR = MODEL_DIR / 'data'
+FIGHT_RESULTS_PATH = DATA_DIR / 'ufc_fight_results_with_odds.csv'
+FIGHTER_STATS_PATH = DATA_DIR / 'ufc-fighters-statistics.csv'
+
 # %% [notebook cell 4]
 def clean_name(name):
     return str(name).lower().strip().replace('.', '').replace("'", "")
 
-fight_results = pd.read_csv("ufc_fight_results.csv")
-fighter_stats  = pd.read_csv("ufc-fighters-statistics.csv")
+def age_at(dob, as_of):
+    dob = pd.to_datetime(dob, errors='coerce')
+    as_of = pd.to_datetime(as_of, errors='coerce')
+    return (as_of - dob).dt.days / 365.25
+
+fight_results = pd.read_csv(FIGHT_RESULTS_PATH)
+fighter_stats = pd.read_csv(FIGHTER_STATS_PATH)
+fight_results['EVENT'] = fight_results['EVENT'].str.strip()
+fight_results['BOUT'] = fight_results['BOUT'].str.strip()
+fight_results['fight_date'] = pd.to_datetime(fight_results['fight_date'], errors='coerce')
 
 # Clean stats
 fighter_stats = fighter_stats.drop(columns=['nickname'])
 num_cols = fighter_stats.select_dtypes('float').columns
 fighter_stats[num_cols] = fighter_stats[num_cols].fillna(fighter_stats[num_cols].median())
 fighter_stats['date_of_birth'] = pd.to_datetime(fighter_stats['date_of_birth'], errors='coerce')
-today = pd.Timestamp.today()
-fighter_stats['age'] = fighter_stats['date_of_birth'].apply(
-    lambda d: today.year - d.year - ((today.month, today.day) < (d.month, d.day)) if pd.notnull(d) else np.nan
-)
-fighter_stats = fighter_stats.drop(columns=['date_of_birth'])
-fighter_stats['age'] = fighter_stats['age'].fillna(fighter_stats['age'].median())
 fighter_stats['stance'] = fighter_stats['stance'].fillna('Unknown')
 fighter_stats = pd.get_dummies(fighter_stats, columns=['stance'], prefix='stance', dtype=int)
 fighter_stats['name'] = fighter_stats['name'].apply(clean_name)
@@ -46,31 +54,57 @@ fight_results[['fighter_1','fighter_2']] = fight_results['BOUT'].str.split(' vs.
 fight_results['fighter_1'] = fight_results['fighter_1'].apply(clean_name)
 fight_results['fighter_2'] = fight_results['fighter_2'].apply(clean_name)
 
-f1 = fight_results[['EVENT','fighter_1','OUTCOME']].rename(columns={'fighter_1':'name','OUTCOME':'outcome_raw'}).copy()
-f2 = fight_results[['EVENT','fighter_2','OUTCOME']].rename(columns={'fighter_2':'name','OUTCOME':'outcome_raw'}).copy()
+f1 = fight_results[['EVENT','BOUT','fight_date','fighter_1','OUTCOME']].rename(columns={'fighter_1':'name','OUTCOME':'outcome_raw'}).copy()
+f2 = fight_results[['EVENT','BOUT','fight_date','fighter_2','OUTCOME']].rename(columns={'fighter_2':'name','OUTCOME':'outcome_raw'}).copy()
 f1['win'] = (f1['outcome_raw'].str[0] == 'W').astype(int)
 f2['win'] = (f2['outcome_raw'].str[-1] == 'W').astype(int)
-all_fights = pd.concat([f1[['EVENT','name','win']], f2[['EVENT','name','win']]]).sort_values('EVENT')
+all_fights = pd.concat([f1[['EVENT','BOUT','fight_date','name','win']], f2[['EVENT','BOUT','fight_date','name','win']]])
+all_fights = all_fights.sort_values(['name','fight_date','EVENT','BOUT'])
 all_fights['rolling_win_rate'] = (
     all_fights.groupby('name')['win']
     .transform(lambda x: x.rolling(5, min_periods=1).mean().shift())
 )
+rolling_fill = all_fights['rolling_win_rate'].mean()
 latest_rolling = (
     all_fights.dropna(subset=['rolling_win_rate'])
     .groupby('name', as_index=False).tail(1)[['name','rolling_win_rate']].drop_duplicates('name')
 )
 fighter_stats = fighter_stats.merge(latest_rolling, on='name', how='left')
-fighter_stats['rolling_win_rate'] = fighter_stats['rolling_win_rate'].fillna(fighter_stats['rolling_win_rate'].mean())
+fighter_stats['rolling_win_rate'] = fighter_stats['rolling_win_rate'].fillna(rolling_fill)
+# Current age is used only by predict_fight; training rows get event-date age below.
+fighter_stats['age'] = age_at(fighter_stats['date_of_birth'], pd.Timestamp.today().normalize())
+fighter_stats['age'] = fighter_stats['age'].fillna(fighter_stats['age'].median())
+fighter_stats_for_training = fighter_stats.drop(columns=['rolling_win_rate'])
+fighter_stats = fighter_stats.drop(columns=['date_of_birth'])
+
+f1_rolling = all_fights[['EVENT','BOUT','name','rolling_win_rate']].rename(
+    columns={'name': 'fighter_1', 'rolling_win_rate': 'rolling_win_rate_f1'}
+)
+f2_rolling = all_fights[['EVENT','BOUT','name','rolling_win_rate']].rename(
+    columns={'name': 'fighter_2', 'rolling_win_rate': 'rolling_win_rate_f2'}
+)
 
 # Build paired dataset (decisive fights only)
 decisive = fight_results[fight_results['OUTCOME'].isin(['W/L','L/W'])].copy()
 decisive['outcome'] = (decisive['OUTCOME'] == 'W/L').astype(int)  # 1 = fighter_1 won
-fight_data = decisive[['EVENT','fighter_1','fighter_2','outcome']].merge(
-    fighter_stats, left_on='fighter_1', right_on='name', how='inner'
+fight_data = decisive[['EVENT','BOUT','fight_date','fighter_1','fighter_2','outcome']].merge(
+    fighter_stats_for_training, left_on='fighter_1', right_on='name', how='inner'
 ).merge(
-    fighter_stats, left_on='fighter_2', right_on='name', how='inner', suffixes=('_f1','_f2')
+    fighter_stats_for_training, left_on='fighter_2', right_on='name', how='inner', suffixes=('_f1','_f2')
+).merge(
+    f1_rolling, on=['EVENT','BOUT','fighter_1'], how='left'
+).merge(
+    f2_rolling, on=['EVENT','BOUT','fighter_2'], how='left'
 )
-fight_data = fight_data.drop(columns=['EVENT','fighter_1','fighter_2','name_f1','name_f2']).dropna()
+fight_data['age_f1'] = age_at(fight_data['date_of_birth_f1'], fight_data['fight_date'])
+fight_data['age_f2'] = age_at(fight_data['date_of_birth_f2'], fight_data['fight_date'])
+age_fill = pd.concat([fight_data['age_f1'], fight_data['age_f2']]).median()
+fight_data[['age_f1','age_f2']] = fight_data[['age_f1','age_f2']].fillna(age_fill)
+fight_data[['rolling_win_rate_f1','rolling_win_rate_f2']] = fight_data[['rolling_win_rate_f1','rolling_win_rate_f2']].fillna(rolling_fill)
+fight_data['bout_key'] = fight_data['EVENT'].astype(str) + '||' + fight_data['BOUT'].astype(str)
+fight_data = fight_data.drop(
+    columns=['EVENT','BOUT','fight_date','fighter_1','fighter_2','name_f1','name_f2','date_of_birth_f1','date_of_birth_f2']
+).dropna()
 
 # Difference features (relative advantage per stat)
 stat_cols = ['wins','losses','draws','height_cm','weight_in_kg','reach_in_cm',
@@ -84,35 +118,54 @@ for col in stat_cols:
         fight_data[f'diff_{col}'] = fight_data[f'{col}_f1'] - fight_data[f'{col}_f2']
 
 print(f"Dataset shape: {fight_data.shape}")
-print(f"Outcome distribution (before swap): {fight_data['outcome'].value_counts().to_dict()}")
+print(f"Outcome distribution: {fight_data['outcome'].value_counts().to_dict()}")
 
 # %% [notebook cell 6]
-np.random.seed(42)
-swap_idx = np.random.rand(len(fight_data)) < 0.5
-
 f1_cols   = [c for c in fight_data.columns if c.endswith('_f1')]
 f2_cols   = [c.replace('_f1', '_f2') for c in f1_cols]
 diff_cols = [c for c in fight_data.columns if c.startswith('diff_')]
 
-fight_data.loc[swap_idx, f1_cols + f2_cols] = fight_data.loc[swap_idx, f2_cols + f1_cols].values
-fight_data.loc[swap_idx, diff_cols] *= -1
-fight_data.loc[swap_idx, 'outcome'] = 1 - fight_data.loc[swap_idx, 'outcome']
+def swap_fighter_order(X_part, y_part, random_state=42):
+    rng = np.random.default_rng(random_state)
+    swap_idx = rng.random(len(X_part)) < 0.5
+    X_swapped = X_part.copy()
+    y_swapped = y_part.copy()
+    swap_rows = X_swapped.index[swap_idx]
+    X_swapped.loc[swap_rows, f1_cols + f2_cols] = X_swapped.loc[swap_rows, f2_cols + f1_cols].values
+    X_swapped.loc[swap_rows, diff_cols] *= -1
+    y_swapped.loc[swap_rows] = 1 - y_swapped.loc[swap_rows]
+    return X_swapped, y_swapped, int(swap_idx.sum())
 
-print(f"Rows swapped: {swap_idx.sum()} / {len(fight_data)}")
-print(f"Outcome distribution (after swap): {fight_data['outcome'].value_counts().to_dict()}")
+def grouped_split(X_part, y_part, groups_part, test_size, random_state):
+    splitter = GroupShuffleSplit(n_splits=1, test_size=test_size, random_state=random_state)
+    return next(splitter.split(X_part, y_part, groups_part))
 
 # %% [notebook cell 8]
-X = fight_data.drop(columns=['outcome'])
+groups = fight_data['bout_key']
+X = fight_data.drop(columns=['outcome','bout_key'])
 y = fight_data['outcome']
 
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, stratify=y, random_state=42
-)
+train_val_idx, test_idx = grouped_split(X, y, groups, test_size=0.2, random_state=42)
+X_train_val, X_test = X.iloc[train_val_idx], X.iloc[test_idx]
+y_train_val, y_test = y.iloc[train_val_idx], y.iloc[test_idx]
+groups_train_val = groups.iloc[train_val_idx]
+assert set(groups_train_val).isdisjoint(set(groups.iloc[test_idx]))
+
+train_idx, val_idx = grouped_split(X_train_val, y_train_val, groups_train_val, test_size=0.2, random_state=43)
+X_train, X_val = X_train_val.iloc[train_idx], X_train_val.iloc[val_idx]
+y_train, y_val = y_train_val.iloc[train_idx], y_train_val.iloc[val_idx]
+assert set(groups_train_val.iloc[train_idx]).isdisjoint(set(groups_train_val.iloc[val_idx]))
+
+X_train, y_train, swapped_train = swap_fighter_order(X_train, y_train, random_state=42)
+
 scaler = StandardScaler()
 X_train_s = scaler.fit_transform(X_train)
+X_val_s   = scaler.transform(X_val)
 X_test_s  = scaler.transform(X_test)
 
-print(f"Train: {X_train_s.shape} | Test: {X_test_s.shape}")
+print(f"Rows swapped in train: {swapped_train} / {len(X_train)}")
+print(f"Train outcome distribution (after swap): {y_train.value_counts().to_dict()}")
+print(f"Train: {X_train_s.shape} | Val: {X_val_s.shape} | Test: {X_test_s.shape}")
 print(f"Total features: {X_train_s.shape[1]}")
 
 # %% [notebook cell 10]
@@ -145,6 +198,8 @@ print(f"\nParameters: {sum(p.numel() for p in model.parameters()):,}")
 # %% [notebook cell 12]
 X_tr = torch.tensor(X_train_s, dtype=torch.float32).to(device)
 y_tr = torch.tensor(y_train.values, dtype=torch.float32).to(device)
+X_va = torch.tensor(X_val_s, dtype=torch.float32).to(device)
+y_va = torch.tensor(y_val.values, dtype=torch.float32).to(device)
 X_te = torch.tensor(X_test_s,  dtype=torch.float32).to(device)
 y_te = torch.tensor(y_test.values,  dtype=torch.float32).to(device)
 
@@ -171,9 +226,9 @@ for epoch in range(EPOCHS):
 
     model.eval()
     with torch.no_grad():
-        val_logits = model(X_te)
-        val_loss = criterion(val_logits, y_te).item()
-        val_acc  = ((torch.sigmoid(val_logits) > 0.5).float() == y_te).float().mean().item()
+        val_logits = model(X_va)
+        val_loss = criterion(val_logits, y_va).item()
+        val_acc  = ((torch.sigmoid(val_logits) > 0.5).float() == y_va).float().mean().item()
 
     train_losses.append(np.mean(batch_losses))
     val_losses.append(val_loss)
