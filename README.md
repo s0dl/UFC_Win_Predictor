@@ -206,6 +206,11 @@ terraform apply
 
 ## Methodology
 
+For a fuller write-up, see the docs folder:
+
+- [Model report](docs/model-report.md)
+- [Modeling appendix](docs/modeling.md)
+
 ### Data Sources
 
 The project uses two public data sources:

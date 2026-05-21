@@ -28,10 +28,20 @@ from scraping_common import CACHE_DIR
 BASE_URL = "https://www.bestfightodds.com"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 BFO_ROTATION_CHARS = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+NON_MMA_EVENT_NAME_PATTERN = re.compile(r"\b(bjj|grappl(?:ing)?|invitational)\b", re.I)
+NON_MMA_EVENT_URL_KEYWORDS = ("ufc-bjj", "ufc-grappl", "ufc-fight-pass-invitational")
 
 
 def is_ufc_event_url(url: str) -> bool:
-    return "/events/ufc" in url.lower()
+    url_lower = url.lower()
+    if "/events/ufc" not in url_lower:
+        return False
+    return not any(keyword in url_lower for keyword in NON_MMA_EVENT_URL_KEYWORDS)
+
+
+def is_ufc_mma_event_name(event_name: str) -> bool:
+    normalized = normalize_event_text(event_name)
+    return normalized.startswith("ufc") and NON_MMA_EVENT_NAME_PATTERN.search(normalized) is None
 
 
 def get_with_retries(session: requests.Session, url: str, retries: int = 3, timeout: int = 30) -> requests.Response | None:
@@ -328,7 +338,7 @@ def archive_ufc_event_urls(session: requests.Session) -> list[str]:
     for link in soup.find_all("a", href=True):
         text = clean_text(link.get_text(" ", strip=True))
         href = link["href"]
-        if text.upper().startswith("UFC") and href.startswith("/events/"):
+        if href.startswith("/events/") and is_ufc_mma_event_name(text):
             urls.append(urljoin(BASE_URL, href))
     return list(dict.fromkeys(urls))
 
@@ -342,7 +352,7 @@ def latest_ufc_event_urls(session: requests.Session) -> list[str]:
     for link in soup.find_all("a", href=True):
         text = clean_text(link.get_text(" ", strip=True))
         href = link["href"]
-        if text.upper().startswith("UFC") and href.startswith("/events/"):
+        if href.startswith("/events/") and is_ufc_mma_event_name(text):
             urls.append(urljoin(BASE_URL, href))
     return list(dict.fromkeys(urls))
 

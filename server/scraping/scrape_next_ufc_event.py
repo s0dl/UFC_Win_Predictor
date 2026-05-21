@@ -16,6 +16,7 @@ if str(SCRAPING_DIR) not in sys.path:
     sys.path.insert(0, str(SCRAPING_DIR))
 
 from scrape_bestfightodds_moneylines import (  # noqa: E402
+    is_ufc_mma_event_name,
     latest_ufc_event_urls,
     scrape_event_moneylines,
 )
@@ -102,6 +103,10 @@ def scrape_next_ufc_event(
             scraped_at=datetime.now(timezone.utc).isoformat(),
             fights=fights,
         )
+
+        if not is_ufc_mma_event_name(card.event):
+            time.sleep(delay)
+            continue
 
         if event_date is not None and event_date >= today:
             future_cards.append((event_date, card))

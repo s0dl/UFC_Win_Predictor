@@ -31,7 +31,7 @@ TAG=$(date +%Y%m%d%H%M%S)
 
 gcloud auth configure-docker $REGION-docker.pkg.dev
 
-docker build -f Dockerfile -t $REPO/ufc-app:$TAG ../..
+docker build -f ../../Dockerfile -t $REPO/ufc-app:$TAG ../..
 docker push $REPO/ufc-app:$TAG
 ```
 
